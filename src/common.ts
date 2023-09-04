@@ -115,8 +115,9 @@ export const createAtoms = <
   )
 
   const baseDataAtom = atom((get) => {
-    getOptions(get) // re-create observable when options change
+    const { queryKey } = getOptions(get) as any // re-create observable when options change
     const observer = get(observerAtom)
+    const queryCache = getQueryClient(get).getQueryCache()
     const observable = {
       subscribe: (arg: { next: (result: Result) => void }) => {
         const callback = (result: Result) => {
@@ -134,7 +135,19 @@ export const createAtoms = <
         }
         const unsubscribe = observer.subscribe(callback)
         callback(observer.getCurrentResult())
-        return { unsubscribe }
+        return {
+          unsubscribe: () => {
+            const unsubscribeCache = queryCache.subscribe(({ type, query }) => {
+              if (
+                type === 'removed' &&
+                query.queryKey.join() === queryKey.join()
+              ) {
+                unsubscribeCache()
+                unsubscribe()
+              }
+            })
+          },
+        }
       },
     }
     const resultAtom = atomWithObservable(() => observable)
